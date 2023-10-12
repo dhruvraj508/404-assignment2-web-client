@@ -22,7 +22,7 @@ import sys
 import socket
 import re
 # you may use urllib to encode data appropriately
-import urllib.parse
+from urllib.parse import urlparse, urlencode
 
 def help():
     print("httpclient.py [GET/POST] [URL]\n")
@@ -40,14 +40,42 @@ class HTTPClient(object):
         self.socket.connect((host, port))
         return None
 
+    def get_url_data(self, url):
+        """Gives the host name, path and the port of a given url.
+
+        Args:
+            url (str): The given url.
+
+        Returns:
+            host (str): Host name of the given url.
+            path (str): Path of the given url. (if any)
+            port (str): Port of the given url. (if any)
+        """
+        # getting the data of the given url by parsing it.
+        url_data = urlparse(url)
+        host = url_data.hostname
+        path = url_data.path
+        port = url_data.port
+
+        return host, path, port
+
     def get_code(self, data):
-        return None
+        # returning code from the received data.
+        data_list = data.split('\r\n')
+        code = int(data_list[0].split()[1])
+        return code
 
     def get_headers(self,data):
-        return None
+        # returning headers from the received data.
+        data_list = data.split('\r\n\r\n')
+        headers = data_list[0]
+        return headers
 
     def get_body(self, data):
-        return None
+        # returning body from the received data.
+        data_list = data.split('\r\n\r\n')
+        body = data_list[1]
+        return body
     
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
@@ -68,13 +96,82 @@ class HTTPClient(object):
         return buffer.decode('utf-8')
 
     def GET(self, url, args=None):
-        code = 500
-        body = ""
+        
+        # getting host, path and port from the given url
+        host_name, path, port = self.get_url_data(url)
+        
+        # if path is empty
+        if path == '':
+            path = '/'
+        # if port is None
+        if port == None:
+            port = 80
+        
+        # connecting to the host with the port.
+        self.connect(host_name, port)
+
+        # reference: TA help session.
+        request = f"GET {path} HTTP/1.1\r\nHost: {host_name}\r\nAccept: */*\r\nConnection: close\r\n\r\n"
+        # sending the request. 
+        self.sendall(request)
+        # getting the data from the socket. 
+        recvd_data = self.recvall(self.socket)
+
+        # getting the headers, code, and body from the data received.
+        code = self.get_code(recvd_data)
+        headers = self.get_headers(recvd_data)
+        body = self.get_body(recvd_data)
+        # printing out headers, code and body to stdout.
+        print("Headers:\n"+headers)
+        print("Code:", code)
+        print("Body:\n"+body)
+        
+        # closing the socket.
+        self.close()
+        # returing the result as a HTTPResponse object.
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
-        code = 500
-        body = ""
+
+        # getting host, path and port from the given url
+        host_name, path, port = self.get_url_data(url)
+
+        # if path is empty
+        if path == '':
+            path = '/'
+        # if port is None
+        if port == None:
+            port = 80
+
+        # connecting to the host with the port.
+        self.connect(host_name, port)
+
+        # if there are no arguments, just empty the args, otherwise
+        # encode the given args. 
+        if not args:
+            args = ''
+        else:
+            args = urlencode(args)
+        
+        # reference: TA help session
+        request = f"POST {path} HTTP/1.1\r\nHost: {host_name}\r\nAccept: */*\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {len(args)}\r\nConnection: close\r\n\r\n{args}"
+        # sending the request. 
+        self.sendall(request)
+        # getting the data from the socket. 
+        recvd_data = self.recvall(self.socket)
+
+        # getting the headers, code, and body from the data received.
+        code = self.get_code(recvd_data)
+        headers = self.get_headers(recvd_data)
+        body = self.get_body(recvd_data)
+        # printing out headers, code and body to stdout/
+        print("Headers:\n"+headers)
+        print("Code:", code)
+        print("Body:\n"+body)
+
+        # closing the socket. 
+        self.close()    
+        # returing the result as a HTTPResponse object.
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
